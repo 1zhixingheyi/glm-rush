@@ -8,6 +8,8 @@
 // @match        *://bigmodel.cn/*
 // @run-at       document-start
 // @grant        none
+// @downloadURL  https://github.com/1zhixingheyi/glm-rush/raw/master/glm-rush-v4.user.js
+// @updateURL    https://github.com/1zhixingheyi/glm-rush/raw/master/glm-rush-v4.user.js
 // ==/UserScript==
 
 (function () {
