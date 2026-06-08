@@ -998,7 +998,7 @@
         // 闭包引用供 refreshUI 使用
         _shadowRef = shadow;
 
-        log('v4.5 已加载 (极速并发+时间同步+全自动抢购)');
+        log('v4.6 已加载 (极速并发+时间同步+全自动抢购)');
         if (state.captured) log('已恢复上次捕获的请求参数, 可直接设定时间');
         setupDialogWatcher();
 
@@ -1084,10 +1084,11 @@
     // ═══════════════════════════════════════════
     //  启动
     // ═══════════════════════════════════════════
-    console.log('[GLM] v4.0 已注入');
+    console.log('[GLM] v4.6 已注入');
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', createPanel);
+        document.addEventListener('DOMContentLoaded', () => { createPanel(); autoScheduleIfNeeded(); });
     } else {
         createPanel();
+        autoScheduleIfNeeded();
     }
 })();
