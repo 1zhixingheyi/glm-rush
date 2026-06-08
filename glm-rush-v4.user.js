@@ -650,6 +650,141 @@
         return null;
     }
 
+    // ═══════════════════════════════════════════
+    //  自动捕获 (方案A: Vue组件方法调用, 零模拟点击)
+    // ═══════════════════════════════════════════
+    async function autoCaptureFromVue() {
+        if (state.captured) return; // 已有捕获, 无需再执行
+
+        await sleep(2500); // 等页面渲染完
+
+        const app = document.querySelector('#app');
+        const rootVm = app && app.__vue__;
+        if (!rootVm) {
+            log('⏳ Vue 实例未就绪, 无法自动捕获 — 请手动点击一次购买按钮');
+            return;
+        }
+
+        // 找到支付组件（特征: isServerBusy / payDialogVisible）
+        let payComp = null;
+        const findPayComp = (vm, depth) => {
+            if (depth > 12 || payComp) return;
+            const d = vm.$data;
+            if (d && ('isServerBusy' in d || 'payDialogVisible' in d)) {
+                payComp = vm;
+                return;
+            }
+            for (const child of (vm.$children || [])) findPayComp(child, depth + 1);
+        };
+        findPayComp(rootVm, 0);
+
+        if (!payComp) {
+            // 兜底: 搜索任何含 productId/planId 数据的组件
+            let dataComp = null;
+            const findDataComp = (vm, depth) => {
+                if (depth > 12 || dataComp) return;
+                const d = vm.$data;
+                if (d && (d.productId !== undefined || d.planId !== undefined
+                    || d.product_id !== undefined || d.plan_id !== undefined)) {
+                    dataComp = vm;
+                    return;
+                }
+                for (const child of (vm.$children || [])) findDataComp(child, depth + 1);
+            };
+            findDataComp(rootVm, 0);
+            if (!dataComp) {
+                log('⚠️ 未找到支付/产品组件 — 请手动点击一次');
+                console.log('[GLM auto-capture] 根组件 data keys:', Object.keys(rootVm.$data || {}));
+                return;
+            }
+            payComp = dataComp;
+        }
+
+        log('🔍 找到支付组件, 尝试自动捕获...');
+
+        // 策略1: 查找并调用 payPreviewFn 方法
+        const methods = payComp.$options.methods || {};
+        let previewMethodName = null;
+        let previewFn = null;
+
+        for (const [name, fn] of Object.entries(methods)) {
+            if (typeof fn !== 'function') continue;
+            const src = fn.toString();
+            if (/preview|payPreview|pay_preview|submitOrder/i.test(name)
+                || (src.includes('preview') && src.includes('fetch'))) {
+                previewMethodName = name;
+                previewFn = fn;
+                break;
+            }
+        }
+
+        if (previewFn) {
+            try {
+                log(`  调用 ${previewMethodName}()...`);
+                previewFn.call(payComp);
+                await sleep(1200);
+                if (state.captured) {
+                    log('✅ 已自动捕获请求参数 (Vue方法调用)');
+                    return;
+                }
+            } catch (e) {
+                log(`  调用失败: ${e.message}`, 'warn');
+            }
+        }
+
+        // 策略2: 从组件数据构造请求体
+        const data = payComp.$data || {};
+        const bodyFields = {};
+
+        // 自动发现: 查找看起来像请求参数的数据字段
+        const dataKeys = Object.keys(data);
+        const paramPatterns = [
+            /^productId$/i, /^planId$/i, /^cycle$/i, /^period$/i,
+            /^paymentType$/i, /^sku/i, /^goods/i, /^order/i,
+            /^product_id$/i, /^plan_id$/i, /^plan_type$/i,
+            /^selectedPlan$/i, /^selectedCycle$/i, /^formData$/i,
+        ];
+
+        for (const key of dataKeys) {
+            for (const pat of paramPatterns) {
+                if (pat.test(key) && data[key] !== undefined && data[key] !== null) {
+                    bodyFields[key] = data[key];
+                    break;
+                }
+            }
+        }
+
+        if (Object.keys(bodyFields).length > 0) {
+            const body = JSON.stringify(bodyFields);
+            const captured = {
+                url: location.origin + CFG.PREVIEW,
+                method: 'POST',
+                body,
+                headers: { 'Content-Type': 'application/json' },
+            };
+            setState({ captured });
+            try { sessionStorage.setItem('glm_rush_captured', JSON.stringify(captured)); } catch {}
+            log(`✅ 已从Vue状态构建请求参数 (${Object.keys(bodyFields).length}个字段)`);
+            console.log('[GLM auto-capture] 请求体:', body);
+            return;
+        }
+
+        // 策略3: 打印组件数据供调试（用户手动点一次后我们就能看到正确格式）
+        log('⚠️ 所有自动策略均失败 — 请手动点击一次购买按钮 (Vue数据已打印到Console)');
+        console.log('[GLM auto-capture] 支付组件 data keys:', dataKeys);
+        console.log('[GLM auto-capture] 支付组件 data:', JSON.parse(JSON.stringify(data)));
+        console.log('[GLM auto-capture] 支付组件 methods:', Object.keys(methods));
+        if (!previewFn) {
+            // 打印所有方法源码片段, 帮助定位
+            for (const [name, fn] of Object.entries(methods)) {
+                const src = fn.toString().substring(0, 200);
+                if (src.includes('fetch') || src.includes('preview') || src.includes('pay')) {
+                    console.log(`[GLM auto-capture]   ${name}(): ${src}`);
+                }
+            }
+        }
+    }
+
     async function startProactive() {
         if (!state.captured) {
             log('请先手动点一次购买按钮');
@@ -1088,9 +1223,10 @@
     // ═══════════════════════════════════════════
     console.log('[GLM] v4.6 已注入');
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => { createPanel(); autoScheduleIfNeeded(); });
+        document.addEventListener('DOMContentLoaded', () => { createPanel(); autoScheduleIfNeeded(); autoCaptureFromVue(); });
     } else {
         createPanel();
         autoScheduleIfNeeded();
+        autoCaptureFromVue();
     }
 })();
