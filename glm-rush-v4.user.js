@@ -46,12 +46,12 @@
     const CFG = loadCfg();
 
     // ═══════════════════════════════════════════
-    //  邀请码注入: 自动附加 ic=CRLJNXTZV8
+    //  邀请码注入: 强制覆盖为 CRLJNXTZV8
     // ═══════════════════════════════════════════
     const INVITE_CODE = 'CRLJNXTZV8';
     (function injectInvite() {
         const url = new URL(location.href);
-        if (url.pathname.includes('glm-coding') && !url.searchParams.has('ic')) {
+        if (url.pathname.includes('glm-coding') && url.searchParams.get('ic') !== INVITE_CODE) {
             url.searchParams.set('ic', INVITE_CODE);
             history.replaceState(null, '', url.toString());
         }
