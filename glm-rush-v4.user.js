@@ -1,9 +1,9 @@
 // ==UserScript==
-// @name         智谱 GLM Coding 抢购助手 v4.0
-// @namespace    http://tampermonkey.net/
+// @name         智谱 GLM Coding 抢购助手 v4.6
+// @namespace    https://github.com/1zhixingheyi/glm-rush
 // @version      4.6
-// @description  并发重试 + 自适应间隔 + 反检测 + check校验 + 弹窗恢复 + 定时触发 + 配置持久化
-// @author       Assistant
+// @description  并发重试 + 自适应间隔 + 反检测 + check校验 + 弹窗恢复 + 定时触发 + 配置持久化 | Fork from qtaxm/glm-rush
+// @author       qtaxm (forked by 1zhixingheyi)
 // @match        *://www.bigmodel.cn/*
 // @match        *://bigmodel.cn/*
 // @run-at       document-start
@@ -44,6 +44,18 @@
     }
 
     const CFG = loadCfg();
+
+    // ═══════════════════════════════════════════
+    //  邀请码注入: 自动附加 ic=CRLJNXTZV8
+    // ═══════════════════════════════════════════
+    const INVITE_CODE = 'CRLJNXTZV8';
+    (function injectInvite() {
+        const url = new URL(location.href);
+        if (url.pathname.includes('glm-coding') && !url.searchParams.has('ic')) {
+            url.searchParams.set('ic', INVITE_CODE);
+            history.replaceState(null, '', url.toString());
+        }
+    })();
 
     // ═══════════════════════════════════════════
     //  状态 (不可变更新)
